@@ -31,7 +31,7 @@ R Markdown for reproducible reporting
 📁 Files Included
 FINALPJDATALOVERS.Rmd: Full analysis and code
 
-FINALPJDATALOVERS.html: Rendered HTML report (if available)
+Hitters.csv: DataSet containing information about MLB players
 
 README.md: This project description
 
