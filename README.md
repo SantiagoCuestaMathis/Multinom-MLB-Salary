@@ -17,8 +17,6 @@ Model: Multinomial logistic regression
 
 Dataset: Hitters.csv – MLB player stats from 1986 and 1987
 
-Preprocessing: Missing values (18%) were dropped, categorical variables converted
-
 Target variable: Salary categorized into tertiles
 
 🔧 Tools Used
