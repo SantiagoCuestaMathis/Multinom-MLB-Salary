@@ -2,8 +2,8 @@
 title: "Proyect"
 output: html_document
 date: "2025-03-31"
----
 GroupName: DATALOVERS
+---
 Before diving into the project, let’s talk about what we’re actually doing here. We’ll be using multinomial logistic regression, but… what does that even mean?
 
 Let’s start with the basics. Logistic regression is a statistical method used to predict whether something falls into one of two categories—like yes or no, win or lose, cat or dog. It works by modeling the probability of an outcome using a sigmoid-shaped curve based on one or more input variables.
