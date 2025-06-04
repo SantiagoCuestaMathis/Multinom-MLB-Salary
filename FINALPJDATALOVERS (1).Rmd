@@ -1,0 +1,534 @@
+---
+title: "Proyect"
+output: html_document
+date: "2025-03-31"
+---
+GroupName: DATALOVERS
+Before diving into the project, let’s talk about what we’re actually doing here. We’ll be using multinomial logistic regression, but… what does that even mean?
+
+Let’s start with the basics. Logistic regression is a statistical method used to predict whether something falls into one of two categories—like yes or no, win or lose, cat or dog. It works by modeling the probability of an outcome using a sigmoid-shaped curve based on one or more input variables.
+
+Now, in our case, we’re not dealing with just two categories: we’re looking at N different salary levels of Major League Baseball (MLB) players. That’s where multinomial logistic regression comes in. It’s basically the big sibling of regular logistic regression that can handle more than two outcomes.
+
+In this project, we’ll use players’ performance stats—like hits, home runs, career at-bats, and more—to predict which income group they fall into: Low, Medium, or High salary. So, we’re turning baseball stats into salary predictions, using a powerful tool that can handle multiple outcomes.
+
+
+```{r}
+#Load the data set
+Data = read.csv("Hitters.csv",
+                header = TRUE,
+                colClasses = "character")
+#Visualize the data
+str(Data)
+```
+We can see that there are 317 players (observations) and 20 different variables.
+These variables include information on players statistics during 1986 and 1987 seasons.
+Variables that could or could not be useful for our classification model.
+
+```{r}
+#Checking the amount of Players and Null values
+nrow(Data)
+sum(is.na(Data))
+colSums(is.na(Data))
+#Drop Missing Values
+Data <- na.omit(Data)
+```
+We have decided to drop the missing values, because they were specifically in the salary variable which is the key driver for our categorization. Considering we had 58 missing salaries (corresponding to 18% of total dataset), we have chosen that this is the most optimal way to continue since we still have a substantial amount of 259 complete cases.
+
+```{r}
+Data$League <- as.factor(Data$League)
+Data$Division <- as.factor(Data$Division)
+Data$NewLeague <- as.factor(Data$NewLeague)
+
+# Convert all columns that should be numeric (except categorical ones)
+num_cols <- c("AtBat", "Hits", "HmRun", "Runs", "RBI", "Walks", "Years",
+              "CAtBat", "CHits", "CHmRun", "CRuns", "CRBI", "CWalks",
+              "PutOuts", "Assists", "Errors", "Salary")
+
+Data[num_cols] <- lapply(Data[num_cols], as.numeric)
+str(Data)
+
+```
+
+In this step we ensure each variable has the correct data type for analysis:  
+- All num_cols must be numeric for creating categories and modeling.(as they were read as a character column when we imported the CSV)
+- League, Division, and NewLeague are categorical, so we convert them to factors for correct statistical handling in plots and models.
+
+```{r}
+
+hist(Data$Salary,
+     main = "Salary Distribution with Custom Salary Classes",
+     xlab = "Salary",
+     col = "lightblue",
+     breaks = 20)
+
+
+# Add mean and median lines
+abline(v = mean(Data$Salary, na.rm = TRUE), col = "darkgreen", lwd = 2, lty = 3)
+abline(v = median(Data$Salary, na.rm = TRUE), col = "purple", lwd = 2, lty = 4)
+
+# Add legend
+legend("topright",
+       legend = c( "Mean", "Median"),
+       col = c("darkgreen", "purple"),
+       lty = c(2, 3, 4),
+       lwd = 2)
+
+```
+
+This plot gives us the distribution of salaries among the players, we can see that higher salaries are less frequent than lower ones, based on this we will decide different categories for different ranges of pay.
+
+```{r}
+# Create salary levels using quartiles
+Data$SalaryClass <- cut(Data$Salary,
+                        breaks = c(0, 250, 700, 1500, Inf),
+                        labels = c("Low", "Mid", "High", "Elite"),
+                        include.lowest = TRUE)
+
+# Check distribution
+table(Data$SalaryClass)
+
+str(Data)
+```
+Here we split the salary category into  4 different categories; "Low", "Mid", "High" and "Elite". 
+The ranges were chosen on visual analysis of the previous histogram.
+
+```{r}
+# Get numeric columns
+num_data <- Data[, sapply(Data, is.numeric)]
+
+# Compute correlations with Salary only
+salary_corr <- cor(num_data, use = "complete.obs")[, "Salary"]
+
+# Remove Salary's self-correlation (optional)
+salary_corr <- salary_corr[names(salary_corr) != "Salary"]
+
+# Sort for readability
+salary_corr <- sort(salary_corr, decreasing = TRUE)
+
+barplot(salary_corr,
+        main = "Correlation with Salary",
+        col = "steelblue",
+        las = 2, # Rotate labels
+        cex.names = 0.8,
+        horiz = TRUE)
+```
+Before making any modifications to our dataset, we first explored which variables, if any, showed a correlation with our dependent variable, Salary. This initial analysis helped us identify which variables might be valuable for our classification model and gave us a sense of how the variables relate to one another.
+
+```{r}
+
+hist(Data$Salary,
+     main = "Salary Distribution with Custom Salary Classes",
+     xlab = "Salary",
+     col = "lightblue",
+     breaks = 20)
+
+abline(v = c(250, 700, 1500), col = "red", lwd = 2, lty = 2)
+
+legend("topright",
+       legend = c("Salary Class Thresholds"),
+       col = "red", lty = 2)
+
+
+```
+Here we plot the same graph with our category ranges visible.
+
+```{r}
+
+# Loop over each SalaryClass and print summary
+for (class in levels(Data$SalaryClass)) {
+  cat("\n--- Summary for Salary Class:", class, "---\n")
+  subset_data <- subset(Data, SalaryClass == class)
+  print(summary(subset_data[, c("Salary", "Hits", "Years", "HmRun")]))
+}
+
+
+```
+Here we select three variables that we believe could have predicting power on player's salary class. This was done by our arbitrary judgement to get a sense a of the data. :)
+
+```{r}
+ par(mfrow=c(2,2))
+ #Sexbarchartexample
+ barplot(table(Data$League), main="League", col=c("red","blue"))
+ #Etnicity
+ barplot(table(Data$Division),main="Division", col=c("cyan","purple"))
+ #EducationField
+ barplot(table(Data$NewLeague), main="NewLeague",
+ col=c("red","blue"))
+```
+We create a series of bar plots to explore the distribution of categorical variables in the dataset. By visualizing the number of players by League, Division, and NewLeague, we get a quick overview of how the data is spread across these groups. This helps identify any class imbalances that could affect the performance of the multinomial classification model later on.
+
+``` {r}
+# Ensure SalaryClass is a factor
+Data$SalaryClass <- as.factor(Data$SalaryClass)
+
+# Boxplots and barplots for visual analysis using SalaryClass
+par(mfrow = c(2, 2))
+
+# Boxplot: Hits by Salary Class
+boxplot(Hits ~ SalaryClass, data = Data,
+        main = "Hits by Salary Class", col = "lightgreen")
+
+# Boxplot: Years in major League by Salary Class
+boxplot(Years ~ SalaryClass, data = Data,
+        main = "Years in Major Leagues by Salary Class", col = "orange")
+
+# Boxplot: Years in League by Salary Class
+boxplot(HmRun  ~ SalaryClass, data = Data,
+        main = "Home Runs in League by Salary Class", col = "red")
+
+# Boxplot: Times at bat in League by Salary Class
+boxplot(AtBat  ~ SalaryClass, data = Data,
+        main = "Times at bat in League by Salary Class", col = "blue")
+
+# Boxplot: Runs in League by Salary Class
+boxplot(Runs  ~ SalaryClass, data = Data,
+        main = "Runs in League by Salary Class", col = "gold")
+
+# Boxplot: Runs Batted in League by Salary Class
+boxplot(RBI  ~ SalaryClass, data = Data,
+        main = "Runs Batted in League by Salary Class", col = "green")
+
+# Boxplot: Errors in League by Salary Class
+boxplot(Errors  ~ SalaryClass, data = Data,
+        main = "Errors in League by Salary Class", col = "purple")
+# Boxplot: Assists in League by Salary Class
+boxplot(Assists  ~ SalaryClass, data = Data,
+        main = "Assists in League by Salary Class", col = "pink")
+
+```
+This section provides a series of boxplots to examine how different performance statistics from the 1986 season relate to salary classes. By visualizing these variables we can identify performance trends across salary levels. These plots help us understand which recent performance metrics are most linked to salary and could therefore be valuable predictors in the classification model.
+
+``` {r}
+# Ensure SalaryClass is a factor
+Data$SalaryClass <- as.factor(Data$SalaryClass)
+
+# Boxplots and barplots for visual analysis using SalaryClass
+par(mfrow = c(2, 2))
+
+# Boxplot: Hits in players career Salary Class
+boxplot(CHits ~ SalaryClass, data = Data,
+        main = "Hits by players career", col = "lightgreen")
+
+# Boxplot: Runs in players career by Salary Class
+boxplot(CRuns  ~ SalaryClass, data = Data,
+        main = "Times at bat in players career", col = "gold")
+
+# Boxplot: Home Runs in players career by Salary Class
+boxplot(CHmRun  ~ SalaryClass, data = Data,
+        main = "Home Runs in players career", col = "red")
+
+# Boxplot: Home Runs in players career by Salary Class
+boxplot(CAtBat  ~ SalaryClass, data = Data,
+        main = "Home Runs in players career", col = "blue")
+```
+This part of the analysis focuses on players’ cumulative career performance. It includes stats grouped by salary class. These visualizations help determine if higher salaries are consistently associated with strong career achievements, suggesting that career totals may be key features in predicting a player's salary class.
+
+
+```{r}
+# Create a combined League + Division group
+Data$LeagueDivision <- paste(Data$League, Data$Division, sep = "-")
+# Barplot of Salary Class by League-Division
+counts_ld <- table(Data$SalaryClass, Data$LeagueDivision)
+
+barplot(counts_ld, beside = TRUE,
+        col = c("red", "blue", "gold", "green"),
+        main = "League-Division by Salary Class",
+        ylim = c(0, max(counts_ld) + 5),
+        xlab = "League-Division")
+
+legend("topright", inset = c(-0.05, 0), xpd = TRUE,
+       legend = rownames(counts_ld),
+       fill = c("red", "blue", "gold", "green"),
+       title = "Salary Class")
+
+Data$LeagueDivision <- NULL
+Data$Salary <- NULL
+
+```
+
+We created a new variable that combines each player’s league and division to explore whether salary class distributions vary across these groups. We also removed the LeagueDivision variable as it was only needed temporarily for visualization. We dropped the Salary variable as well from the dataset, since our goal is to predict salary class. For example, we can see that players who are not part of league W are more likely to belong to the elite salary class.
+
+--- 
+
+Now we are going to start by running the multinomial logistic regression model using all of the predictors we have in the dataset. The multinomial logistic regression model estimates the log-odds of a player being in each salary class (Mid, High, Elite) compared to the baseline category (Low). Each row of coefficients represents the effect of that variable on the likelihood of being in that salary class compared to Low.
+```{r}
+# Load the required package
+library(nnet)  # Multinomial logistic regression
+
+# Fit the multinomial logistic regression model on the full dataset
+# Using SalaryClass as the response variable and all predictors
+multinom_model <- multinom(
+  SalaryClass ~ AtBat + Hits + HmRun + Runs + RBI + Walks + Years +
+    CAtBat + CHits + CHmRun + CRuns + CRBI + CWalks + League + Division +
+    PutOuts + Assists + Errors + NewLeague,
+  data = Data,
+  trace = FALSE  # Suppress convergence output
+)
+
+# View the model summary
+summary(multinom_model)
+
+# Predict the classes on the training data
+predicted_classes <- predict(multinom_model, newdata = Data)
+
+# Calculate the accuracy
+accuracy <- mean(predicted_classes == Data$SalaryClass)
+
+# Print the accuracy
+cat("Model Accuracy:", round(accuracy * 100, 2), "%\n")
+
+
+```
+After running our multinomial logistic regression model, we observed that certain predictors had notably high coefficients for specific salary classes:
+
+HmRun (Home Runs) and Hits were important predictors for the Elite class. In particular, Hits had a strong positive coefficient (0.1263), and HmRun also showed a large positive effect (0.1158) for predicting Elite salaries.
+
+HmRun was also highly influential for the High salary class, with an even larger positive coefficient (0.1984).
+
+Years had an interesting pattern: it was positively associated with Mid (0.1613) and High (0.1809) salary classes but had a strong negative impact on reaching the Elite class (-2.5293), suggesting that players with fewer years of experience might be more likely to achieve elite salaries.
+
+DivisionW had a strong negative coefficient (-2.0672) for the Elite class, indicating that being in the West division significantly reduced the probability of earning an Elite salary. This aligns with what we saw before in our bar charts!!!
+
+NewLeagueN showed a large positive impact (3.2326) for the Elite class, meaning players who moved to the New League had a much higher likelihood of being categorized in the highest salary tier.
+
+Overall, these predictors — HmRun, Hits, Years, DivisionW, and NewLeagueN — were the most influential in distinguishing between salary classes, particularly in identifying players likely to reach the Elite category.
+
+Many variables have small or mixed coefficients, which will be further evaluated with p-values.
+
+Our model had a 72.97% accuracy
+
+```{r}
+# Compute z-values and p-values
+z_values <- summary(multinom_model)$coefficients / summary(multinom_model)$standard.errors
+p_values <- 2 * (1 - pnorm(abs(z_values)))
+
+# Round p-values
+round(p_values, 4)
+```
+```{r}
+# Transpose so we can check by predictor (columns)
+significant_predictors <- colnames(p_values)[apply(p_values, 2, function(x) any(x < 0.05))]
+
+# View significant predictors
+print(significant_predictors)
+
+```
+
+By analyzing the p-values, we identified which variables were statistically significant in distinguishing salary classes. A low p-value (typically < 0.05) means the variable likely has a real influence and its statistically different from 0 (So rejecting the null hypothesis).
+
+After calculating p-values for each predictor in our multinomial logistic regression model, we found that several variables were statistically significant (p < 0.05) in at least one salary class. These significant predictors included AtBat, Hits, HmRun, Years, CRBI, LeagueN, DivisionW, Assists, Errors, and NewLeagueN.
+
+Notably:
+
+Hits and HmRun were significant contributors, supporting their role in identifying players in higher salary classes.
+
+Years was also significant, aligning with the earlier finding that experience impacts salary class, though differently for Elite versus Mid/High.
+
+DivisionW and NewLeagueN were highly influential for the Elite class, suggesting that division and league changes strongly affect the highest salary outcomes.
+
+Overall, these predictors were found to have a meaningful effect on a player's likelihood of being classified into a given salary tier.
+
+We are now moving forward to the next part: Cross Validation and we are going to check the accuracy and the overall error of our prediction model when splitting it into training and test data.
+
+---
+```{r}
+set.seed(15072003) # report the name of the student with this date of birth
+ cv_methods = c("1. Vanilla validation set", "2. LOO-CV", "3. K-fold CV (with K = 5)",
+ "4. K-fold CV (with K = 10)")
+ sample(cv_methods, 1)
+```
+
+The CV we are going to use is specifically Leave One Out Cross Validation (LOOCV):
+We fit our model using 259 players(Observations) once for each player, leaving one observation each time as the test case, and training on the remaining observation.
+
+
+```{r}
+# Load required package
+library(nnet)
+
+# Initialize prediction vector
+predicted_classes <- rep(NA, nrow(Data))
+
+# Perform Leave-One-Out Cross-Validation
+for (i in 1:nrow(Data)) {
+  # Training set (leave one out)
+  train_data <- Data[-i, ]
+  test_data <- Data[i, , drop = FALSE]
+  
+  # Fit model on training data
+  loocv_model <- multinom(
+    SalaryClass ~ AtBat + Hits + HmRun + Runs + RBI + Walks + Years +
+      CAtBat + CHits + CHmRun + CRuns + CRBI + CWalks +
+      PutOuts + Assists + Errors + NewLeague + League + Division,
+    data = train_data,
+    trace = FALSE
+  )
+  
+  # Predict on left-out observation
+  predicted_classes[i] <- as.character(predict(loocv_model, newdata = test_data))
+
+}
+
+# Compare predicted vs actual
+conf_matrix <- table(Predicted = predicted_classes, Actual = Data$SalaryClass)
+print(conf_matrix)
+
+# Compute accuracy
+accuracy <- mean(predicted_classes == as.character(Data$SalaryClass))
+
+cat("LOOCV Accuracy:", round(accuracy, 4), "\n")
+```
+After performing Leave-One-Out Cross-Validation, we obtained a confusion matrix comparing the predicted salary classes to the actual ones. The results show that the model performs reasonably well, with an overall accuracy of 61.78%. Telling us that our training model might have been over fitting as we got a 72.97% accuracy vs this 61.78%. 
+
+We will run another CV method for us to further analyze the accuracy of our model. The other one we chose to use was the Vanilla CV
+
+```{r}
+library(nnet)
+
+# Split the data
+set.seed(2)  
+
+train_index <- sample(1:nrow(Data), 0.7 * nrow(Data))
+train_data <- Data[train_index, ]
+test_data <- Data[-train_index, ]
+
+# Fit multinomial model on training set
+multinom_model <- multinom(SalaryClass ~ ., data = train_data)
+# Predict on the test set
+predicted_class <- predict(multinom_model, newdata = test_data)
+
+# Actual classes
+true_class <- test_data$SalaryClass
+
+# Compute accuracy
+accuracy <- mean(predicted_class == true_class)
+error_rate <- 1 - accuracy
+
+# Print results
+cat("Accuracy:", round(accuracy, 4), "\n")
+cat("Misclassification Error:", round(error_rate, 4), "\n")
+table(Predicted = predicted_class, Actual = true_class)
+```
+After training the multinomial logistic regression model using a vanilla validation set, the model converged successfully after 100 iterations with a final loss of 91.79.
+
+It achieved an accuracy of 55.13% and a misclassification error of 44.87%, meaning it correctly predicted salary classes slightly more than half of the time.
+
+From the confusion matrix:
+
+The model performed well for predicting Low and Mid salary classes.
+
+High salary players were more often confused with Mid or Elite.
+
+Elite salary players were the hardest to classify, with frequent misclassifications into High and Mid.
+
+Overall, the model captures the main structure for common classes but struggles with rarer classes like Elite, suggesting a need for either more data or a more complex model.
+---
+We are now going to run a Second Model but this time well consider only variables with predicting power which we know thanks to the past model and the p and z values.
+
+
+```{r}
+# Reduced model with selected predictors
+reduced_model <- multinom(
+  SalaryClass ~ AtBat+ Hits+ HmRun + CRBI +Years +  NewLeague + League + Division+ Assists+ Errors,
+  data = Data,
+  trace = FALSE
+)
+
+# Summary
+summary(reduced_model)
+
+# Predict the classes on the training data
+predicted_classes <- predict(multinom_model, newdata = Data)
+
+# Calculate the accuracy
+accuracy <- mean(predicted_classes == Data$SalaryClass)
+
+# Print the accuracy
+cat("Model Accuracy:", round(accuracy * 100, 2), "%\n")
+```
+We built a reduced multinomial logistic regression model using only the most predictive variables identified earlier. The results confirm that Hits and CRBI are strong positive indicators across salary classes, especially for Elite players. DivisionW has a notable negative impact on the Elite class, while Years shows a mixed effect — positive for Mid and High, but negative for Elite. The model achieves a good balance between simplicity and explanatory power, with an accuracy of 72.97% (Exactly like the one from before but with less variables this time!).
+
+---
+To evaluate whether the reduced model performs as well as the full model, we applied Leave-One-Out Cross-Validation (LOOCV) using the same approach as before. This allows us to compare the predictive accuracy of both models and assess whether simplification leads to improved or comparable performance.
+
+```{r}
+# Leave-One-Out Cross-Validation for Reduced Model
+reduced_preds <- rep(NA, nrow(Data))
+
+for (i in 1:nrow(Data)) {
+  train_data <- Data[-i, ]
+  test_data <- Data[i, , drop = FALSE]
+  
+  model <- multinom(
+    SalaryClass ~ AtBat+ Hits+ HmRun + CRBI +Years + NewLeague + League + Division+ Assists+ Errors,
+    data = train_data,
+    trace = FALSE
+  )
+  
+  reduced_preds[i] <- as.character(predict(model, newdata = test_data))
+}
+
+# Confusion matrix
+table(Predicted = reduced_preds, Actual = Data$SalaryClass)
+
+# Accuracy
+reduced_accuracy <- mean(reduced_preds == as.character(Data$SalaryClass))
+cat("Reduced Model LOOCV Accuracy:", round(reduced_accuracy, 4), "\n")
+```
+This model was built using only the predictors that showed statistical significance (p < 0.05) in the full model. We applied Leave-One-Out Cross-Validation (LOOCV) to evaluate its performance. The confusion matrix shows that, like the full model, the reduced model performs best in predicting players in the Mid and High salary classes. While both accuracy's on full training data were the exact same for the reduced and the full models (72.97%) The overall LOOCV accuracy of the reduced is 62.16%, which is slightly higher than the full model's LOOCV 61.78%. This suggests that the reduced model is not only simpler, but also slightly more effective in making predictions.
+
+---
+
+EXTRA PART:
+We were not fully satisfied with the small increase of accuracy between the full model and the reduced one so we decided to go a bit further and run a step wise selection to see what would be the highest accuracy we could achieve. Next, we applied a feature selection procedure to automatically identify a more efficient subset of predictors. Starting from the full model, the algorithm adds or removes variables based on the AIC criterion to find the best-fitting model. We then used the selected formula to re-run Leave-One-Out Cross-Validation (LOOCV), allowing us to evaluate the predictive performance.
+
+```{r}
+# Load necessary libraries
+library(nnet)
+library(MASS)
+
+# Fit the full model
+full_model <- multinom(SalaryClass ~ ., data = Data, trace = FALSE)
+
+# Run stepwise selection (both directions)
+stepwise_model <- stepAIC(full_model, direction = "both", trace = TRUE)
+
+# Print the summary of the selected model
+summary(stepwise_model)
+
+# Get selected formula
+selected_formula <- formula(stepwise_model)
+
+# --- Re-run LOOCV using selected features ---
+
+# Initialize prediction vector
+predicted_classes <- rep(NA, nrow(Data))
+
+# Loop through each observation (LOOCV)
+for (i in 1:nrow(Data)) {
+  train_data <- Data[-i, ]
+  test_data <- Data[i, , drop = FALSE]
+  
+  # Fit model on training data using selected variables
+  loocv_model <- multinom(selected_formula, data = train_data, trace = FALSE)
+  
+  # Predict on left-out observation
+  predicted_classes[i] <- as.character(predict(loocv_model, newdata = test_data))
+}
+
+# Compare predicted vs actual
+conf_matrix <- table(Predicted = predicted_classes, Actual = Data$SalaryClass)
+print(conf_matrix)
+
+# Compute accuracy
+accuracy <- mean(predicted_classes == as.character(Data$SalaryClass))
+cat("LOOCV Accuracy (Stepwise Model):", round(accuracy, 4), "\n")
+
+
+```
+Using stepwise selection, we developed a more refined model with a reduced set of predictors: AtBat, Runs, Years, CHits, CRBI, PutOuts, Assists, and Errors.
+We then evaluated this model using Leave-One-Out Cross-Validation (LOOCV). The resulting confusion matrix showed improved classification performance, particularly for the Mid and High salary groups.
+The overall LOOCV accuracy increased to 65.64%, marking the best performance across all models tested so far. This indicates that automatic feature selection not only simplifies the model but also enhances its predictive power by retaining the most informative variables.
+
+In conclusion, while stepwise selection improved model accuracy, further improvements would likely require more data, especially to better classify classes with fewer observations.
